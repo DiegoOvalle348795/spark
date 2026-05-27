@@ -1,82 +1,98 @@
+"""
+DAG de Airflow: pipeline de movilidad urbana con dataset oficial NYC TLC.
+
+Etapas:
+  1. download_tlc_dataset  -> descarga Parquet + CSV de zonas (si no existen)
+  2. run_spark_analysis    -> procesamiento distribuido en cluster Spark
+  3. load_results_to_mongodb -> carga tablas agregadas a MongoDB
+"""
+
 from __future__ import annotations
 
-import glob
-import json
-import os
+import subprocess
+import sys
 from datetime import datetime
+from pathlib import Path
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-from pymongo import MongoClient
 
-OUTPUT_BASE = "/opt/airflow/data/processed"
-MONGO_URI = "mongodb://mongo:27017"
-MONGO_DB = "urban_mobility"
-
-COLLECTIONS = [
-    "demand_by_hour",
-    "demand_by_day",
-    "top_pickup_zones",
-    "top_dropoff_zones",
-    "revenue_by_payment",
-    "route_patterns",
-    "summary",
-]
+# Rutas dentro del contenedor Airflow
+SCRIPTS_DIR = Path("/opt/airflow/scripts")
+DATA_RAW_TLC = Path("/opt/airflow/data/raw/tlc")
 
 
-def load_json_folder_to_mongo(collection_name: str):
-    folder = os.path.join(OUTPUT_BASE, collection_name)
-    files = glob.glob(os.path.join(folder, "part-*.json"))
+def download_tlc_dataset() -> None:
+    """
+    Descarga yellow_tripdata_2025-01.parquet y taxi_zone_lookup.csv
+    solo si aún no están en data/raw/tlc/.
+    """
+    script = SCRIPTS_DIR / "download_tlc_data.py"
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
 
-    docs = []
-    for file_path in files:
-        with open(file_path, "r", encoding="utf-8") as file:
-            for line in file:
-                line = line.strip()
-                if line:
-                    docs.append(json.loads(line))
-
-    client = MongoClient(MONGO_URI)
-    db = client[MONGO_DB]
-    collection = db[collection_name]
-    collection.delete_many({})
-
-    if docs:
-        collection.insert_many(docs)
-
-    client.close()
-    print(f"Colección {collection_name}: {len(docs)} documentos cargados en MongoDB")
+    parquet = DATA_RAW_TLC / "yellow_tripdata_2025-01.parquet"
+    zones = DATA_RAW_TLC / "taxi_zone_lookup.csv"
+    if not parquet.exists() or not zones.exists():
+        raise FileNotFoundError(
+            "No se encontraron los archivos TLC en data/raw/tlc/. "
+            "Revisa la conexión a internet y vuelve a ejecutar el DAG."
+        )
 
 
-def load_all_results_to_mongo():
-    for collection_name in COLLECTIONS:
-        load_json_folder_to_mongo(collection_name)
+def load_results_to_mongodb() -> None:
+    """Carga los CSV procesados por Spark hacia MongoDB."""
+    script = SCRIPTS_DIR / "load_results_to_mongodb.py"
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
 
 
 with DAG(
     dag_id="urban_mobility_spark_pipeline",
-    description="Pipeline de movilidad urbana: Spark cluster + MongoDB + Streamlit",
+    description=(
+        "Pipeline NYC TLC: descarga oficial -> Spark cluster -> MongoDB -> Streamlit"
+    ),
     start_date=datetime(2026, 1, 1),
     schedule=None,
     catchup=False,
-    tags=["spark", "big-data", "mobility", "mongodb"],
+    tags=["spark", "big-data", "mobility", "tlc", "mongodb"],
 ) as dag:
+
+    download_tlc_dataset_task = PythonOperator(
+        task_id="download_tlc_dataset",
+        python_callable=download_tlc_dataset,
+    )
 
     run_spark_analysis = BashOperator(
         task_id="run_spark_analysis",
         bash_command=(
             "spark-submit "
             "--master spark://spark-master:7077 "
-            "--conf spark.executor.memory=512m "
-            "--conf spark.driver.memory=512m "
+            "--conf spark.executor.memory=2g "
+            "--conf spark.driver.memory=2g "
+            "--conf spark.sql.shuffle.partitions=8 "
             "/opt/airflow/jobs/mobility_spark_job.py"
         ),
     )
 
     load_to_mongo = PythonOperator(
         task_id="load_results_to_mongodb",
-        python_callable=load_all_results_to_mongo,
+        python_callable=load_results_to_mongodb,
     )
 
-    run_spark_analysis >> load_to_mongo
+    download_tlc_dataset_task >> run_spark_analysis >> load_to_mongo

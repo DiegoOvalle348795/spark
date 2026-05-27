@@ -30,7 +30,16 @@ airflow/logs/
 airflow/airflow.cfg
 airflow/webserver_config.py
 
-# Datos generados por el pipeline (se recrean con el DAG o generate_sample_data.py)
+# Dataset oficial TLC (descargado por el DAG; puede pesar ~50-100 MB+)
+data/raw/tlc/*.parquet
+data/raw/tlc/*.csv
+!data/raw/tlc/.gitkeep
+
+# Datos simulados antiguos (ya no se usan)
+data/raw/trips.csv
+data/raw/zones.csv
+
+# Resultados agregados del pipeline Spark
 data/processed/
 
 # Logs

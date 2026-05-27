@@ -1,148 +1,151 @@
 # Proyecto Final 4.28 — Análisis de Patrones de Movilidad Urbana con Apache Spark
 
-Este proyecto implementa un pipeline de Big Data para analizar patrones de movilidad urbana usando:
+Pipeline de Big Data para analizar **patrones de movilidad urbana en Nueva York** usando el dataset oficial de **NYC Taxi & Limousine Commission (TLC)**.
 
-- Apache Spark en cluster Docker con 3 nodos mínimos: 1 master + 2 workers.
-- Apache Airflow para orquestar el pipeline.
-- MongoDB para almacenar tablas analíticas.
-- Streamlit para visualizar resultados.
+## Tecnologías
 
-## Arquitectura
+- **Apache Spark** — cluster Docker (1 master + 2 workers)
+- **Apache Airflow** — orquestación del pipeline
+- **MongoDB** — almacenamiento de tablas analíticas
+- **Streamlit** — dashboard de visualización
+
+## Dataset oficial TLC
+
+| Archivo | URL |
+|---------|-----|
+| Yellow Taxi Trip Records (enero 2025) | [yellow_tripdata_2025-01.parquet](https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2025-01.parquet) |
+| Taxi Zone Lookup Table | [taxi_zone_lookup.csv](https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv) |
+
+Página oficial: https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
+
+Los archivos se guardan en `data/raw/tlc/`. **No hace falta descargarlos a mano**: el DAG de Airflow los descarga automáticamente si no existen.
+
+## Arquitectura del pipeline
 
 ```text
-Dataset CSV
-   ↓
-Airflow DAG
-   ↓
-Spark cluster Docker: master + worker 1 + worker 2
-   ↓
-Limpieza, transformación, joins con zonas y agregaciones
-   ↓
-Archivos JSON procesados
-   ↓
-Carga a MongoDB
-   ↓
-Dashboard Streamlit
+NYC TLC (Parquet + CSV de zonas)
+        ↓
+  download_tlc_dataset   (Airflow)
+        ↓
+  run_spark_analysis     (Spark cluster: limpieza, joins, agregaciones)
+        ↓
+  data/processed/        (CSV agregados)
+        ↓
+  load_results_to_mongodb
+        ↓
+  Dashboard Streamlit
 ```
 
-## Estructura
+## Estructura del proyecto
 
 ```text
-proyecto_movilidad_spark/
+spark/
 ├── airflow/dags/mobility_pipeline_dag.py
-├── data/raw/trips.csv
-├── data/raw/zones.csv
-├── data/processed/
-├── docs/reporte_borrador.md
+├── data/
+│   ├── raw/tlc/                    # Dataset oficial (descargado por el DAG)
+│   └── processed/                  # Resultados de Spark (generados)
 ├── jobs/mobility_spark_job.py
-├── scripts/generate_sample_data.py
+├── scripts/
+│   ├── download_tlc_data.py
+│   └── load_results_to_mongodb.py
 ├── streamlit/app.py
 ├── Dockerfile.airflow
 ├── docker-compose.yml
-└── requirements.txt
+└── README.md
 ```
 
 ## Requisitos
 
-- Docker Desktop instalado y abierto.
-- Docker Compose.
-- Python local opcional para generar datos de prueba.
+- Docker Desktop instalado y en ejecución
+- Docker Compose v2
+- Conexión a internet (para la primera descarga del Parquet TLC, ~50–100 MB)
 
-## Paso 1: Generar dataset de prueba
-
-Desde la carpeta del proyecto:
-
-```bash
-python3 scripts/generate_sample_data.py
-```
-
-Esto crea:
-
-- `data/raw/trips.csv`
-- `data/raw/zones.csv`
-
-Si usas el dataset real de NYC Taxi & Limousine, coloca tu archivo en `data/raw/trips.csv` con las columnas esperadas por el proyecto.
-
-## Paso 2: Levantar el cluster y servicios
+## Paso 1: Levantar el cluster y servicios
 
 ```bash
 docker compose up --build
 ```
 
-Servicios importantes:
+Espera a que todos los contenedores estén en estado `Up` (especialmente `airflow-webserver`).
 
-- Spark Master: http://localhost:8080
-- Worker 1: http://localhost:8081
-- Worker 2: http://localhost:8082
-- Airflow: http://localhost:8088
-- Mongo Express: http://localhost:8085
-- Streamlit: http://localhost:8501
+### URLs de acceso
 
-Usuario de Airflow:
+| Servicio | URL |
+|----------|-----|
+| **Airflow** | http://localhost:8088 |
+| **Streamlit** | http://localhost:8501 |
+| **Spark Master UI** | http://localhost:8080 |
+| Spark Worker 1 | http://localhost:8081 |
+| Spark Worker 2 | http://localhost:8082 |
+| Mongo Express | http://localhost:8085 |
 
-```text
-usuario: admin
-contraseña: admin
-```
-
-## Paso 3: Ejecutar pipeline en Airflow
-
-1. Entra a `http://localhost:8088`.
-2. Activa el DAG `urban_mobility_spark_pipeline`.
-3. Dale click en `Trigger DAG`.
-4. Espera a que terminen las tareas:
-   - `run_spark_analysis`
-   - `load_results_to_mongodb`
-
-## Paso 4: Ver resultados
-
-Entra a Streamlit:
+### Credenciales Airflow
 
 ```text
-http://localhost:8501
+Usuario:    admin
+Contraseña: admin
 ```
 
-Ahí verás:
+## Paso 2: Ejecutar el pipeline en Airflow
 
-- Viajes limpios.
-- Duración promedio.
-- Distancia promedio.
-- Ingreso total.
-- Demanda por hora.
-- Demanda por día.
-- Top zonas de origen y destino.
-- Ingresos por tipo de pago.
-- Rutas origen-destino más frecuentes.
+1. Abre http://localhost:8088 e inicia sesión.
+2. Activa el DAG **`urban_mobility_spark_pipeline`**.
+3. Haz clic en **Trigger DAG** (▶).
+4. Espera a que las tres tareas terminen en verde:
+   - `download_tlc_dataset` — descarga Parquet y CSV de zonas (omite si ya existen)
+   - `run_spark_analysis` — procesamiento Spark en el cluster
+   - `load_results_to_mongodb` — carga resultados a MongoDB
 
-## Cómo comprobar que el cluster tiene al menos 3 nodos
+> La primera ejecución puede tardar varios minutos por la descarga del Parquet y el volumen de datos de enero 2025.
 
-Entra a:
+### Descarga manual opcional (sin Airflow)
 
-```text
-http://localhost:8080
+```bash
+python3 scripts/download_tlc_data.py
 ```
 
-Deberías ver:
+## Paso 3: Ver resultados en Streamlit
+
+Abre http://localhost:8501
+
+El dashboard muestra:
+
+- Demanda por hora del día
+- Demanda por día de la semana
+- Top 10 zonas de origen y destino
+- Ingresos por tipo de pago
+- Análisis de viajes al aeropuerto
+
+## Cluster Spark (3 nodos)
+
+En http://localhost:8080 deberías ver:
 
 - `spark-master`
 - `spark-worker-1`
 - `spark-worker-2`
 
-Esto cumple con la condición de presentar el proyecto en un cluster de nodos en Docker.
+## Tablas analíticas generadas
 
-## Colecciones creadas en MongoDB
+Spark escribe CSV en `data/processed/` y MongoDB los expone en la base **`urban_mobility`**:
 
-Base de datos: `urban_mobility`
+| Colección | Contenido |
+|-----------|-----------|
+| `demand_by_hour` | Viajes, duración, distancia, tarifa e ingresos por hora |
+| `demand_by_day` | Métricas por día de la semana |
+| `top_pickup_zones` | Top 10 zonas de origen |
+| `top_dropoff_zones` | Top 10 zonas de destino |
+| `payment_analysis` | Análisis por tipo de pago |
+| `airport_analysis` | Viajes con zonas que contienen "Airport" |
 
-Colecciones:
+## Limpieza de datos aplicada en Spark
 
-- `summary`
-- `demand_by_hour`
-- `demand_by_day`
-- `top_pickup_zones`
-- `top_dropoff_zones`
-- `revenue_by_payment`
-- `route_patterns`
+Se eliminan registros con:
+
+- Fechas de pickup/dropoff nulas
+- `trip_distance` ≤ 0
+- `fare_amount` < 0 o `total_amount` < 0
+- `trip_duration_min` ≤ 0 o > 240 minutos
+- `passenger_count` ≤ 0
 
 ## Detener servicios
 
@@ -150,8 +153,14 @@ Colecciones:
 docker compose down
 ```
 
-Para borrar también volúmenes:
+Para eliminar también volúmenes (MongoDB y Postgres de Airflow):
 
 ```bash
 docker compose down -v
 ```
+
+## Referencias
+
+- [NYC TLC Trip Record Data](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page)
+- [Apache Spark Documentation](https://spark.apache.org/docs/latest/)
+- [Apache Airflow Documentation](https://airflow.apache.org/docs/)

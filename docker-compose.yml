@@ -15,6 +15,7 @@ services:
     volumes:
       - ./jobs:/opt/airflow/jobs
       - ./data:/opt/airflow/data
+      - ./scripts:/opt/airflow/scripts
     networks:
       - mobility-net
 
@@ -38,6 +39,7 @@ services:
     volumes:
       - ./jobs:/opt/airflow/jobs
       - ./data:/opt/airflow/data
+      - ./scripts:/opt/airflow/scripts
     networks:
       - mobility-net
 
@@ -61,6 +63,7 @@ services:
     volumes:
       - ./jobs:/opt/airflow/jobs
       - ./data:/opt/airflow/data
+      - ./scripts:/opt/airflow/scripts
     networks:
       - mobility-net
 
@@ -123,6 +126,7 @@ services:
       - ./airflow/dags:/opt/airflow/dags
       - ./jobs:/opt/airflow/jobs
       - ./data:/opt/airflow/data
+      - ./scripts:/opt/airflow/scripts
     networks:
       - mobility-net
 
@@ -151,6 +155,7 @@ services:
       - ./airflow/dags:/opt/airflow/dags
       - ./jobs:/opt/airflow/jobs
       - ./data:/opt/airflow/data
+      - ./scripts:/opt/airflow/scripts
     networks:
       - mobility-net
 
@@ -177,6 +182,7 @@ services:
       - ./airflow/dags:/opt/airflow/dags
       - ./jobs:/opt/airflow/jobs
       - ./data:/opt/airflow/data
+      - ./scripts:/opt/airflow/scripts
     networks:
       - mobility-net
 
