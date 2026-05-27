@@ -1,0 +1,7 @@
+zone_id,zone_name,min_longitude,max_longitude,min_latitude,max_latitude
+1,Centro,-74.015,-73.99,40.7,40.725
+2,Norte,-73.99,-73.95,40.76,40.81
+3,Aeropuerto,-73.81,-73.75,40.63,40.67
+4,Sur,-74.02,-73.96,40.62,40.69
+5,Zona Universitaria,-73.97,-73.93,40.725,40.76
+6,Distrito Financiero,-74.02,-73.99,40.69,40.71
