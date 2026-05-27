@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# macOS / editores
+.DS_Store
+.idea/
+.vscode/
+
+# Airflow (logs locales si ejecutas fuera de Docker)
+airflow/logs/
+airflow/airflow.cfg
+airflow/webserver_config.py
+
+# Datos generados por el pipeline (se recrean con el DAG o generate_sample_data.py)
+data/processed/
+
+# Logs
+*.log
